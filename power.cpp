@@ -20,10 +20,8 @@
 #include <hardware_legacy/power.h>
 #include <wakelock/wakelock.h>
 
-#include <aidl/android/system/suspend/ISystemSuspend.h>
-#include <aidl/android/system/suspend/IWakeLock.h>
-#include <android/binder_manager.h>
 #include <android-base/logging.h>
+#include <android/system/suspend/1.0/ISystemSuspend.h>
 #include <utils/Trace.h>
 
 #include <mutex>
@@ -31,40 +29,37 @@
 #include <thread>
 #include <unordered_map>
 
-using aidl::android::system::suspend::ISystemSuspend;
-using aidl::android::system::suspend::IWakeLock;
-using aidl::android::system::suspend::WakeLockType;
+using android::sp;
+using android::system::suspend::V1_0::ISystemSuspend;
+using android::system::suspend::V1_0::IWakeLock;
+using android::system::suspend::V1_0::WakeLockType;
 
 static std::mutex gLock;
-static std::unordered_map<std::string, std::shared_ptr<IWakeLock>> gWakeLockMap;
+static std::unordered_map<std::string, sp<IWakeLock>> gWakeLockMap;
 
-static const std::shared_ptr<ISystemSuspend> getSystemSuspendServiceOnce() {
-    static std::shared_ptr<ISystemSuspend> suspendService =
-        ISystemSuspend::fromBinder(ndk::SpAIBinder(AServiceManager_waitForService(
-            (ISystemSuspend::descriptor + std::string("/default")).c_str())));
+static const sp<ISystemSuspend>& getSystemSuspendServiceOnce() {
+    static sp<ISystemSuspend> suspendService = ISystemSuspend::getService();
     return suspendService;
 }
 
 int acquire_wake_lock(int, const char* id) {
     ATRACE_CALL();
-    const auto suspendService = getSystemSuspendServiceOnce();
+    const auto& suspendService = getSystemSuspendServiceOnce();
     if (!suspendService) {
-        LOG(ERROR) << "Failed to get SystemSuspend service";
+        LOG(ERROR) << "ISystemSuspend::getService() failed.";
         return -1;
     }
 
     std::lock_guard<std::mutex> l{gLock};
     if (!gWakeLockMap[id]) {
-        std::shared_ptr<IWakeLock> wl = nullptr;
-        auto status = suspendService->acquireWakeLock(WakeLockType::PARTIAL, id, &wl);
-        // It's possible that during device shutdown SystemSuspend service has already exited.
-        // Check that the wakelock object is not null.
-        if (!wl) {
-            LOG(ERROR) << "ISuspendService::acquireWakeLock() call failed: "
-                       << status.getDescription();
+        auto ret = suspendService->acquireWakeLock(WakeLockType::PARTIAL, id);
+        // It's possible that during device shutdown SystemSuspend service has already exited. In
+        // these situations HIDL calls to it will result in a DEAD_OBJECT transaction error. We
+        // check for DEAD_OBJECT so that libpower clients can shutdown cleanly.
+        if (ret.isDeadObject()) {
             return -1;
         } else {
-            gWakeLockMap[id] = wl;
+            gWakeLockMap[id] = ret;
         }
     }
     return 0;
@@ -75,12 +70,12 @@ int release_wake_lock(const char* id) {
     std::lock_guard<std::mutex> l{gLock};
     if (gWakeLockMap[id]) {
         // Ignore errors on release() call since hwbinder driver will clean up the underlying object
-        // once we clear the corresponding shared_ptr.
-        auto status = gWakeLockMap[id]->release();
-        if (!status.isOk()) {
-            LOG(ERROR) << "IWakeLock::release() call failed: " << status.getDescription();
+        // once we clear the corresponding strong pointer.
+        auto ret = gWakeLockMap[id]->release();
+        if (!ret.isOk()) {
+            LOG(ERROR) << "IWakeLock::release() call failed: " << ret.description();
         }
-        gWakeLockMap[id] = nullptr;
+        gWakeLockMap[id].clear();
         return 0;
     }
     return -1;
@@ -96,7 +91,7 @@ class WakeLock::WakeLockImpl {
     bool acquireOk();
 
   private:
-    std::shared_ptr<IWakeLock> mWakeLock;
+    sp<IWakeLock> mWakeLock;
 };
 
 std::optional<WakeLock> WakeLock::tryGet(const std::string& name) {
@@ -114,20 +109,14 @@ WakeLock::WakeLock(std::unique_ptr<WakeLockImpl> wlImpl) : mImpl(std::move(wlImp
 WakeLock::~WakeLock() = default;
 
 WakeLock::WakeLockImpl::WakeLockImpl(const std::string& name) : mWakeLock(nullptr) {
-    const auto suspendService = getSystemSuspendServiceOnce();
-    if (!suspendService) {
-        LOG(ERROR) << "Failed to get SystemSuspend service";
-        return;
-    }
-
-    std::shared_ptr<IWakeLock> wl = nullptr;
-    auto status = suspendService->acquireWakeLock(WakeLockType::PARTIAL, name, &wl);
-    // It's possible that during device shutdown SystemSuspend service has already exited.
-    // Check that the wakelock object is not null.
-    if (!wl) {
-        LOG(ERROR) << "ISuspendService::acquireWakeLock() call failed: " << status.getDescription();
+    static sp<ISystemSuspend> suspendService = ISystemSuspend::getService();
+    auto ret = suspendService->acquireWakeLock(WakeLockType::PARTIAL, name);
+    // It's possible that during device SystemSuspend service is not avaiable. In these
+    // situations HIDL calls to it will result in a DEAD_OBJECT transaction error.
+    if (ret.isDeadObject()) {
+        LOG(ERROR) << "ISuspendService::acquireWakeLock() call failed: " << ret.description();
     } else {
-        mWakeLock = wl;
+        mWakeLock = ret;
     }
 }
 
@@ -135,9 +124,9 @@ WakeLock::WakeLockImpl::~WakeLockImpl() {
     if (!acquireOk()) {
         return;
     }
-    auto status = mWakeLock->release();
-    if (!status.isOk()) {
-        LOG(ERROR) << "IWakeLock::release() call failed: " << status.getDescription();
+    auto ret = mWakeLock->release();
+    if (!ret.isOk()) {
+        LOG(ERROR) << "IWakeLock::release() call failed: " << ret.description();
     }
 }
 
