@@ -35,6 +35,7 @@ extern "C"
  */
 
 
+typedef int wifi_radio;
 typedef int wifi_ring_buffer_id;
 
 #define PER_PACKET_ENTRY_FLAGS_DIRECTION_TX  1    // 0: TX, 1: RX
