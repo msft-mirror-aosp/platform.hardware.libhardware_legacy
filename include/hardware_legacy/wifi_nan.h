@@ -94,7 +94,10 @@ typedef enum {
     NAN_PAIRING_INITIATOR_RESPONSE       = 18,
     NAN_PAIRING_RESPONDER_RESPONSE       = 19,
     NAN_BOOTSTRAPPING_INITIATOR_RESPONSE = 20,
-    NAN_BOOTSTRAPPING_RESPONDER_RESPONSE = 21
+    NAN_BOOTSTRAPPING_RESPONDER_RESPONSE = 21,
+    NAN_PAIRING_END                      = 22,
+    NAN_SUSPEND_REQUEST_RESPONSE         = 23,
+    NAN_RESUME_REQUEST_RESPONSE          = 24
 } NanResponseType;
 
 /* NAN Publish Types */
@@ -150,11 +153,11 @@ typedef enum {
     NAN_PAIRING_VERIFICATION = 1
 } NanPairingRequestType;
 
-/* AKM type */
+/* Nan AKM type */
 typedef enum {
     SAE = 0,
     PASN = 1
-} Akm;
+} NanAkm;
 
 /* NAN Channel Info */
 typedef struct {
@@ -196,7 +199,13 @@ typedef enum {
     /*  if the pairing id is invalid */
     NAN_STATUS_INVALID_PAIRING_ID = 13,
     /*  if the bootstrapping id is invalid */
-    NAN_STATUS_INVALID_BOOTSTRAPPING_ID = 14
+    NAN_STATUS_INVALID_BOOTSTRAPPING_ID = 14,
+    /* If same request is received again */
+    NAN_STATUS_REDUNDANT_REQUEST = 15,
+    /* If current request is not supported */
+    NAN_STATUS_NOT_SUPPORTED = 16,
+    /* If no Wifi Aware connection is active */
+    NAN_STATUS_NO_CONNECTION = 17,
 } NanStatusType;
 
 /* NAN Transmit Types */
@@ -275,7 +284,8 @@ typedef enum {
 /* Pairing bootstrapping Responder's response */
 typedef enum {
     NAN_BOOTSTRAPPING_REQUEST_ACCEPT = 0,
-    NAN_BOOTSTRAPPING_REQUEST_REJECT = 1
+    NAN_BOOTSTRAPPING_REQUEST_REJECT = 1,
+    NAN_BOOTSTRAPPING_REQUEST_COMEBACK = 2
 } NanBootstrappingResponseCode;
 
 /* NAN DP channel config options */
@@ -346,8 +356,8 @@ typedef struct {
 #define NAN_CIPHER_SUITE_SHARED_KEY_256_MASK           0x02
 #define NAN_CIPHER_SUITE_PUBLIC_KEY_2WDH_128_MASK      0x04
 #define NAN_CIPHER_SUITE_PUBLIC_KEY_2WDH_256_MASK      0x08
-#define NAN_CIPHER_SUITE_PUBLIC_KEY_PASN_128_MASK      0x10
-#define NAN_CIPHER_SUITE_PUBLIC_KEY_PASN_256_MASK      0x20
+#define NAN_CIPHER_SUITE_PUBLIC_KEY_PASN_128_MASK      0x40
+#define NAN_CIPHER_SUITE_PUBLIC_KEY_PASN_256_MASK      0x80
 
 /* NAN ranging indication condition MASKS */
 #define NAN_RANGING_INDICATE_CONTINUOUS_MASK   0x01
@@ -404,6 +414,25 @@ typedef struct {
       if QOS is required or not.
     */
     NanQosCfgStatus qos_cfg;
+    /*
+      Config to set FSD with Gas bit
+      in the SDEA Control Field.
+     */
+    u8 config_fsd_gas;
+    u8 enable_fsd_gas;
+
+    /*
+      Config to set FSD Required bit
+      in the SDEA Control Field.
+     */
+    u8 config_fsd_req;
+    u8 enable_fsd_req;
+
+    /*
+      Config to set gtk protection bit
+      in the SDEA Control Field.
+     */
+    u8 gtk_protection;
 } NanSdeaCtrlParams;
 
 /*
@@ -1109,6 +1138,20 @@ typedef struct {
     */
     u8 config_instant_mode_channel;
     wifi_channel instant_mode_channel;
+
+    /*
+       Enable/Disable unsync service discovery.
+       0 - Disable
+       1 - Enable
+    */
+    u8 config_unsync_srvdsc;
+    u8 enable_unsync_srvdsc;
+
+    /*
+      Configure regulatory information.
+    */
+    u8 config_reg_info;
+    u8 reg_info_val;
 } NanEnableRequest;
 
 /*
@@ -1285,6 +1328,12 @@ typedef struct {
       is_suspension_supported is false in NanCapabilities.
     */
     bool enable_suspendability;
+
+    /* s3 capabilities */
+    u16 s3_capabilities;
+
+    /* cipher capabilities */
+    u8 cipher_capabilities;
 } NanPublishRequest;
 
 /*
@@ -1464,6 +1513,9 @@ typedef struct {
       is_suspension_supported is false in NanCapabilities.
     */
     bool enable_suspendability;
+
+    /* cipher capabilities */
+    u8 cipher_capabilities;
 } NanSubscribeRequest;
 
 /*
@@ -2431,6 +2483,9 @@ typedef struct {
        for setting up the Secure Data Path.
     */
     u8 scid[NAN_MAX_SCID_BUF_LEN];
+
+    /* Publish or Subscribe Id of an earlier Publish/Subscribe */
+    u16 publish_subscribe_id;
 } NanDataPathInitiatorRequest;
 
 /*
@@ -2483,7 +2538,22 @@ typedef struct {
        for setting up the Secure Data Path.
     */
     u8 scid[NAN_MAX_SCID_BUF_LEN];
+
+    /* Publish or Subscribe Id of an earlier Publish/Subscribe */
+    u16 publish_subscribe_id;
+
+    /*
+      Discovery MAC addr of the publisher/peer
+    */
+    u8 peer_disc_mac_addr[NAN_MAC_ADDR_LEN];
 } NanDataPathIndicationResponse;
+
+/* Sub slot parameters */
+typedef struct {
+    u8 entry_control;
+    u16 time_bitmap_control;
+    u32 time_bitmap;
+} NanS3Params;
 
 /* NDP termination info */
 typedef struct {
@@ -2666,7 +2736,7 @@ typedef struct {
     /*
       AKM used for the pairing verification
     */
-    Akm akm;
+    NanAkm akm;
 
     /*
       Whether should cache the negotiated NIK/NPK for future verification
@@ -2677,6 +2747,11 @@ typedef struct {
       The Identity key for pairing, can be used for pairing verification
     */
     u8 nan_identity_key[NAN_IDENTITY_KEY_LEN];
+
+    /*
+      NAN Cipher Suite Type
+    */
+    u32 cipher_type;
 
 } NanPairingRequest;
 
@@ -2713,7 +2788,7 @@ typedef struct {
     /*
       AKM used for the pairing verification
     */
-    Akm akm;
+    NanAkm akm;
 
     /*
       Whether should cache the negotiated NIK/NPK for future verification
@@ -2724,7 +2799,20 @@ typedef struct {
       The Identity key for pairing, can be used for pairing verification
     */
     u8 nan_identity_key[NAN_IDENTITY_KEY_LEN];
+
+    /*
+      NAN Cipher Suite Type
+    */
+    u32 cipher_type;
 } NanPairingIndicationResponse;
+
+typedef struct {
+    /*
+      Unique token Id generated on the initiator/responder side
+      used for a pairing session between two NAN devices
+    */
+    u32 pairing_instance_id;
+} NanPairingEndRequest;
 
 /*
   Event indication received on the responder side when a Nan pairing session is initiated on the
@@ -2765,7 +2853,9 @@ typedef struct {
     /* The PMK excahnge between two devices*/
     NanSecurityPmk npk;
     /* The AKM used during the key exchange*/
-    Akm akm;
+    NanAkm akm;
+    /* NAN Cipher Suite Type */
+    u32 cipher_type;
 } NpkSecurityAssociation;
 
 /*
@@ -2815,6 +2905,12 @@ typedef struct {
 
     /* Proposed bootstrapping method */
     u16 request_bootstrapping_method;
+
+    /* The length of cookie. */
+    u32 cookie_length;
+
+    /* Cookie for the follow up request */
+    u8 cookie[];
 
 } NanBootstrappingRequest;
 /*
@@ -2877,8 +2973,24 @@ typedef struct {
       expected reason codes.
     */
     NanStatusType reason_code;
+    /* The delay of bootstrapping in seconds */
+    u32 come_back_delay;
+
+    /* The length of cookie. */
+    u32 cookie_length;
+
+    /* Cookie received from the comeback response */
+    u8 cookie[];
 
 } NanBootstrappingConfirmInd;
+
+/*
+ Event indication the device enter or exist the suspension mode
+*/
+typedef struct {
+    /* Indication the device is suspended or not */
+    bool is_suspended;
+} NanSuspensionModeChangeInd;
 
 /* Response and Event Callbacks */
 typedef struct {
@@ -2906,6 +3018,7 @@ typedef struct {
     void (*EventPairingConfirm) (NanPairingConfirmInd* event);
     void (*EventBootstrappingRequest) (NanBootstrappingRequestInd* event);
     void (*EventBootstrappingConfirm) (NanBootstrappingConfirmInd* event);
+    void (*EventSuspensionModeChange) (NanSuspensionModeChangeInd* event);
 } NanCallbackHandler;
 
 /**@brief nan_enable_request
@@ -3247,6 +3360,23 @@ wifi_error nan_pairing_request(transaction_id id, wifi_interface_handle iface,
  */
 wifi_error nan_pairing_indication_response(transaction_id id, wifi_interface_handle iface,
                                            NanPairingIndicationResponse* msg);
+
+/**@brief nan_pairing_end
+ *        Cancel and remove the existing Pairing setups
+ *
+ * @param transaction_id:
+ * @param wifi_interface_handle:
+ * @param NanPairingEndRequest:
+ * @return Synchronous wifi_error
+ * @return Asynchronous NotifyResponse CB return
+ *                      NAN_STATUS_SUCCESS
+ *                      NAN_STATUS_INVALID_PARAM
+ *                      NAN_STATUS_INTERNAL_FAILURE
+ *                      NAN_STATUS_PROTOCOL_FAILURE
+ *                      NAN_STATUS_INVALID_PAIRING_ID
+ */
+wifi_error nan_pairing_end(transaction_id id, wifi_interface_handle iface,
+                                                 NanPairingEndRequest* msg);
 
 /**@brief nan_bootstrapping_request
  *        Initiate a NAN Bootstrapping session.
