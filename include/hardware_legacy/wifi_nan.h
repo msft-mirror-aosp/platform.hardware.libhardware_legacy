@@ -40,9 +40,9 @@ typedef u16 transaction_id;
 typedef u32 NanDataPathId;
 
 #define NAN_MAC_ADDR_LEN                6
-#define NAN_MAJOR_VERSION               2
+#define NAN_MAJOR_VERSION               4
 #define NAN_MINOR_VERSION               0
-#define NAN_MICRO_VERSION               1
+#define NAN_MICRO_VERSION               0
 #define NAN_MAX_SOCIAL_CHANNELS         3
 
 /* NAN Maximum Lengths */
@@ -356,8 +356,8 @@ typedef struct {
 #define NAN_CIPHER_SUITE_SHARED_KEY_256_MASK           0x02
 #define NAN_CIPHER_SUITE_PUBLIC_KEY_2WDH_128_MASK      0x04
 #define NAN_CIPHER_SUITE_PUBLIC_KEY_2WDH_256_MASK      0x08
-#define NAN_CIPHER_SUITE_PUBLIC_KEY_PASN_128_MASK      0x10
-#define NAN_CIPHER_SUITE_PUBLIC_KEY_PASN_256_MASK      0x20
+#define NAN_CIPHER_SUITE_PUBLIC_KEY_PASN_128_MASK      0x40
+#define NAN_CIPHER_SUITE_PUBLIC_KEY_PASN_256_MASK      0x80
 
 /* NAN ranging indication condition MASKS */
 #define NAN_RANGING_INDICATE_CONTINUOUS_MASK   0x01
@@ -414,6 +414,25 @@ typedef struct {
       if QOS is required or not.
     */
     NanQosCfgStatus qos_cfg;
+    /*
+      Config to set FSD with Gas bit
+      in the SDEA Control Field.
+     */
+    u8 config_fsd_gas;
+    u8 enable_fsd_gas;
+
+    /*
+      Config to set FSD Required bit
+      in the SDEA Control Field.
+     */
+    u8 config_fsd_req;
+    u8 enable_fsd_req;
+
+    /*
+      Config to set gtk protection bit
+      in the SDEA Control Field.
+     */
+    u8 gtk_protection;
 } NanSdeaCtrlParams;
 
 /*
@@ -1119,6 +1138,20 @@ typedef struct {
     */
     u8 config_instant_mode_channel;
     wifi_channel instant_mode_channel;
+
+    /*
+       Enable/Disable unsync service discovery.
+       0 - Disable
+       1 - Enable
+    */
+    u8 config_unsync_srvdsc;
+    u8 enable_unsync_srvdsc;
+
+    /*
+      Configure regulatory information.
+    */
+    u8 config_reg_info;
+    u8 reg_info_val;
 } NanEnableRequest;
 
 /*
@@ -1295,6 +1328,12 @@ typedef struct {
       is_suspension_supported is false in NanCapabilities.
     */
     bool enable_suspendability;
+
+    /* s3 capabilities */
+    u16 s3_capabilities;
+
+    /* cipher capabilities */
+    u8 cipher_capabilities;
 } NanPublishRequest;
 
 /*
@@ -1474,6 +1513,9 @@ typedef struct {
       is_suspension_supported is false in NanCapabilities.
     */
     bool enable_suspendability;
+
+    /* cipher capabilities */
+    u8 cipher_capabilities;
 } NanSubscribeRequest;
 
 /*
@@ -1519,6 +1561,12 @@ typedef struct {
     */
     u16 sdea_service_specific_info_len;
     u8 sdea_service_specific_info[NAN_MAX_SDEA_SERVICE_SPECIFIC_INFO_LEN];
+
+    /*
+       Add shared key descriptor attribute to the Followup request when the
+       flag is set
+    */
+    u8 shared_key_desc_flag;
 } NanTransmitFollowupRequest;
 
 /*
@@ -2499,7 +2547,19 @@ typedef struct {
 
     /* Publish or Subscribe Id of an earlier Publish/Subscribe */
     u16 publish_subscribe_id;
+
+    /*
+      Discovery MAC addr of the publisher/peer
+    */
+    u8 peer_disc_mac_addr[NAN_MAC_ADDR_LEN];
 } NanDataPathIndicationResponse;
+
+/* Sub slot parameters */
+typedef struct {
+    u8 entry_control;
+    u16 time_bitmap_control;
+    u32 time_bitmap;
+} NanS3Params;
 
 /* NDP termination info */
 typedef struct {
@@ -2852,6 +2912,20 @@ typedef struct {
     /* Proposed bootstrapping method */
     u16 request_bootstrapping_method;
 
+    /*
+       Sequence of values which further specify the published service beyond
+       the service name.
+    */
+    u16 service_specific_info_len;
+    u8 service_specific_info[NAN_MAX_SERVICE_SPECIFIC_INFO_LEN];
+
+    /*
+       Sequence of values indicating the service specific info in SDEA
+       Used for service managed bootstrapping method
+    */
+    u16 sdea_service_specific_info_len;
+    u8 sdea_service_specific_info[NAN_MAX_SDEA_SERVICE_SPECIFIC_INFO_LEN];
+
     /* The length of cookie. */
     u32 cookie_length;
 
@@ -2870,9 +2944,34 @@ typedef struct {
     */
     u32 service_instance_id;
 
+    /* Discovery MAC addr of the peer/initiator */
+    u8 peer_disc_mac_addr[NAN_MAC_ADDR_LEN];
+
+    /*
+       Sequence of values which further specify the published service beyond
+       the service name.
+    */
+    u16 service_specific_info_len;
+    u8 service_specific_info[NAN_MAX_SERVICE_SPECIFIC_INFO_LEN];
+
+    /*
+       Sequence of values indicating the service specific info in SDEA
+       Used for service managed bootstrapping method
+    */
+    u16 sdea_service_specific_info_len;
+    u8 sdea_service_specific_info[NAN_MAX_SDEA_SERVICE_SPECIFIC_INFO_LEN];
 
     /* Response Code indicating ACCEPT/REJECT */
     NanBootstrappingResponseCode rsp_code;
+
+    /* The delay of bootstrapping in seconds */
+    u32 come_back_delay;
+
+    /* The length of cookie. */
+    u32 cookie_length;
+
+    /* Cookie for the follow up response */
+    u8 cookie[];
 
 } NanBootstrappingIndicationResponse;
 
