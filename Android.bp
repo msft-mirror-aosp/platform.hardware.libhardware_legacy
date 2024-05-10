@@ -1,6 +1,7 @@
 // Copyright 2006 The Android Open Source Project
 
 package {
+    default_team: "trendy_team_android_kernel",
     default_applicable_licenses: ["hardware_libhardware_legacy_license"],
 }
 
@@ -45,12 +46,9 @@ cc_library {
     export_include_dirs: ["include"],
     shared_libs: ["android.system.suspend-V1-ndk"],
     vendor_available: true,
-    vndk: {
-        enabled: true,
-    },
     apex_available: [
-       "//apex_available:platform",
-       "com.android.uwb",
+        "//apex_available:platform",
+        "com.android.uwb",
     ],
     min_sdk_version: "Tiramisu",
 }
@@ -72,9 +70,6 @@ cc_library_shared {
     name: "libhardware_legacy",
     defaults: ["libpower_defaults"],
     vendor_available: true,
-    vndk: {
-        enabled: true,
-    },
 
     shared_libs: [
         "android.system.suspend-V1-ndk",
